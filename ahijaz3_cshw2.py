@@ -9,7 +9,7 @@ load_dotenv()
 client = OpenAI()
 
 # Set this to True for the 4-question test, False to do the full 500
-TEST_MODE = True
+TEST_MODE = False
 
 def get_possible_qas(data, limit=500):
     """
