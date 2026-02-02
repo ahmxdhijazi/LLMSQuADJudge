@@ -381,13 +381,11 @@ def main():
     elif args.mode == 'download':
         # Check the CLI for an arument, we need that id fr
         if not args.id:
-            print("--batch_id needed to download.")
+            print("--id needed to download.")
             return
         
         # Save initially as a generic name. AUTOMATIC NAMING HANDLED IN FUNCTION, yessir!
-        output_name = f"graded_output_{args.id[-6:]}.jsonl"
-        print(f"Checking status for {args.id}...")
-        check_and_download_results(args.id, output_name)
+        check_and_download_results(args.id)
         return
 
     # Logic to decide test vs full based on CLI argument
