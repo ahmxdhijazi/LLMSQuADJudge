@@ -3,10 +3,12 @@ import time # For sleep functionality, to wait between status checks
 import argparse  # For the CLI argument parsing
 from dotenv import load_dotenv
 from openai import OpenAI
+import os # to access OpenRouter API key from environment variables
 
 # Load environment variables from .env file
 load_dotenv()
 client = OpenAI()
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 def get_possible_qas(data, limit=500):
     """
@@ -138,10 +140,53 @@ def check_and_download_results(batch_job):
     # ---- END OF GEMINI GENERATED LOGIC ----
     print(f"\nResults saved.")
 
+
+#---- END OF OPENAI: BEGIN OPENROUTER SERIAL FUNCTION  ----#
+def run_serial_openrouter(questions, model="qwen/qwen3-8b"):
+    """
+    Run questions one by one (serially) using OpenRouter.
+    """
+    print(f"Starting Serial Run for {len(questions)} items using OpenRouter.")
+    
+    # Initialize a specific client for OpenRouter
+    # Variable OPENROUTER_API_KEY defined at the top
+    or_client = OpenAI(
+        base_url="https://openrouter.ai/api/v1", # new connection object for OpenRouter
+        api_key=OPENROUTER_API_KEY # use the OpenRouter API key
+    )
+
+    results = [] # To store results
+
+    for i, entry in enumerate(questions):
+        print(f"Processing {i+1}/{len(questions)}: ID {entry['id']}")
+        # Send the request
+        completion = or_client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "Answer using only a short phrase, date, or entity. Do not use full sentences."},
+                {"role": "user", "content": entry['question']}
+            ],
+            # 'max_tokens' instead of max_completion_tokens
+            max_tokens=100 
+        )
+        
+        # Extract the answer
+        answer_text = completion.choices[0].message.content.strip()
+        
+        # Save the result
+        result_entry = {
+            "id": entry['id'], # Keep the ID so we can match the 1/500 later
+            "model_answer": answer_text
+        }
+        results.append(result_entry)
+
+    return results
+
 def main():
     # "python .py --mode full" or "python script.py" for test
     parser = argparse.ArgumentParser(description="SQuAD Batch Processor")
-    parser.add_argument('--mode', choices=['test', 'full'], default='test', help="Run in 'test' mode (4 items) or 'full' mode (500 items)")
+    parser.add_argument('--mode', choices=['test', 'full', 'serial'], default='test', 
+                        help="Modes: 'test' (4 batch), 'full' (500 batch), or 'serial' (OpenRouter)")
     args = parser.parse_args()
 
     '''
@@ -157,7 +202,21 @@ def main():
     print(f"Successfully loaded {len(possible_questions)} questions!") # should be 500
 
     # Logic to decide test vs full based on CLI argument
-    if args.mode == 'test':
+    if args.mode == 'serial':
+        # Select Data for serial processing
+        serial_data = possible_questions[:5] # Currently process only 5 for testing
+        # Run the method to process serially using OpenRouter
+        results = run_serial_openrouter(serial_data)
+        
+        # Save the results
+        output_filename = "serial_output.json"
+        print(f"Saving serial results to {output_filename}...")
+        with open(output_filename, 'w', encoding='utf-8') as f:
+            json.dump(results, f, indent=2)
+        print("Done!")
+        return # Stop here, don't do the batch stuff below
+    
+    elif args.mode == 'test':
         batch_data = possible_questions[:4]
         jsonl_filename = "batch_input_TEST.jsonl"
         print(f"TEST: Processing {len(batch_data)} items.")
